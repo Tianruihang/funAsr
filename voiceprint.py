@@ -1,3 +1,5 @@
+import os
+
 import pyaudio
 import wave
 import librosa
@@ -43,6 +45,9 @@ def read_audio_file(file_path):
         # 如果失败，尝试用 pydub 作为后备方案
         try:
             from pydub import AudioSegment
+            print("====使用pydub读取音频文件===",file_path)
+            boo = os.path.exists()
+            print( "====音频文件是否存在====",boo)
             audio = AudioSegment.from_file(file_path)
             y = np.array(audio.get_array_of_samples())
             sr = audio.frame_rate
@@ -98,6 +103,6 @@ def compare_audio_features(feature_recorded, feature_local):
 # record_audio(5)
 
 # 对比录制的麦克风音频和本地音频文件
-result = compare_audio_files()
-print(result)
+# result = compare_audio_files()
+# print(result)
 
