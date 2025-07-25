@@ -1,4 +1,5 @@
 # -*- coding:utf-8 -*-
+
 from flask import Flask, render_template, request, jsonify
 import sys,os,traceback
 import torch
@@ -339,6 +340,79 @@ def addcache():
         # 将音频特征存入缓存
         cache.set(client_ip + "_"+cache_name, audio_features, timeout=60 * 60 * 24)
     return jsonify({"message": "缓存添加成功"}), 200
+
+import librosa
+import soundfile as sf
+import numpy as np
+CHUNK_SIZE =640
+ENCODER_CHUNK_LOOK_BACK = 6
+DECODER_CHUNK_LOOK_BACK = 4
+# 获取当前脚本的目录
+script_dir = os.path.dirname(os.path.abspath(__file__))
+@app.route("/audio", methods=["GET"])
+def check_local_file():
+    # 加载并预处理音频
+    audio_path = "test.wav"
+    file = os.path.join(script_dir, 'static', 'test.wav')
+    audio_data, sr = sf.read(file)
+    # 重采样至 16kHz
+    if sr != 16000:
+        audio_data = librosa.resample(audio_data, orig_sr=sr, target_sr=16000)
+
+    # 转为单声道
+    if audio_data.ndim > 1:
+        audio_data = np.mean(audio_data, axis=1)
+
+    # 归一化并转为 int16
+    audio_data = librosa.util.normalize(audio_data)
+    audio_array = (audio_data * 32767).astype(np.int16)
+    # 初始化缓存
+    cache = None
+    results = []
+    text_result = []
+    # 模拟按 chunk 输入
+    for start in range(0, len(audio_array), CHUNK_SIZE):
+        chunk = audio_array[start: start + CHUNK_SIZE]
+        is_final = start + CHUNK_SIZE >= len(audio_array)  # 最后一块标记 is_final
+        # 带异常捕获的生成
+        try:
+            resultT = model.generate(
+                input=chunk[np.newaxis, :],  # 添加批次维度
+                cache={},
+                is_final=is_final,
+                chunk_size=CHUNK_SIZE,
+                encoder_chunk_look_back=ENCODER_CHUNK_LOOK_BACK,
+                decoder_chunk_look_back=DECODER_CHUNK_LOOK_BACK
+            )
+            if isinstance(resultT, list):
+                # 提取列表中第一个元素的文本（典型结构：多个结果按置信度排序）
+                text = resultT[0].get("text", "") if resultT else ""
+            elif isinstance(resultT, dict):
+                text = resultT.get("text", "")
+            else:
+                text = ""
+            results.append(text)
+        except Exception as e:
+            print(f"生成过程异常: {str(e)}")
+
+    # 最后一帧标记结束
+    final_result = model.generate(
+        input=np.zeros((1, 0), dtype=np.int16),  # 空输入用于标记 is_final
+        cache=cache,
+        is_final=True,
+        chunk_size=CHUNK_SIZE,
+        encoder_chunk_look_back=ENCODER_CHUNK_LOOK_BACK,
+        decoder_chunk_look_back=DECODER_CHUNK_LOOK_BACK,
+    )
+
+    final_text = ""
+    if isinstance(final_result, dict):
+        final_text = final_result.get("text", "")
+    elif isinstance(final_result, list):
+        final_text = final_result[0].get("text", "")
+
+    print("\n🧾 最终识别结果：")
+    print("".join(results) + final_text)
 
 
 if __name__ == '__main__':
