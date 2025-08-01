@@ -47,20 +47,27 @@ path_punc='./models/punc_ct-transformer_zh-cn-common-vocab272727-pytorch'
 path_asr=path_asr if os.path.exists(path_asr)else "iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch"
 path_vad=path_vad if os.path.exists(path_vad)else "iic/speech_fsmn_vad_zh-cn-16k-common-pytorch"
 path_punc=path_punc if os.path.exists(path_punc)else "iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch"
-
-torch.cuda.set_per_process_memory_fraction(0.3)  # 限制为 50% 显存
-torch.cuda.empty_cache()  # 清空缓存
+# device = "cuda" if torch.cuda.is_available() else "cpu"
+device = "cpu"
+print(f'device now is: {device}')
+if torch.cuda.is_available():
+    torch.cuda.set_per_process_memory_fraction(0.3)
+    torch.cuda.empty_cache()
+    torch.backends.cudnn.benchmark = True
 
 # 多进程和 CUDA 设置
-torch.multiprocessing.set_start_method('spawn', force=True)
+try:
+    torch.multiprocessing.set_start_method('spawn', force=True)
+except RuntimeError:
+    pass
 torch.backends.cudnn.benchmark = True
-
 model = AutoModel(model=path_asr, model_revision="v2.0.4",
                 disable_update=True,
                   vad_model=path_vad,
                   vad_model_revision="v2.0.4",
                   punc_model=path_punc,
                   punc_model_revision="v2.0.4",
+                  device=device
                   )
 
 V_BODY="lambda_03"
@@ -198,7 +205,7 @@ def vopV2():
     return jsonify(opt)
 
 # 初始化缓存和验证器
-cache = VoiceFeatureCache(host='120.211.84.149', port=6379, db=0)
+cache = VoiceFeatureCache(host='127.0.0.1', port=6379, db=2)
 verifier = RealTimeVoiceVerifier(feature_cache=cache)
 
 @app.route("/vop/v3", methods=["GET"])
